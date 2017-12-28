@@ -151,7 +151,7 @@ fn can_scrypt_hash() {
         buflen: control.len(),
         _control: Vec::new()
     };
-    let derivation = scrypt.derive(salt.as_bytes(), password.as_bytes());
+    let derivation = scrypt.derive(salt.as_bytes(), password.as_bytes()).unwrap();
     assert_eq!(&derivation, &control, "Derived Scrypt key isn't equal to control parameter");
 }
 

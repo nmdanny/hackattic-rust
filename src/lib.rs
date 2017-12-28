@@ -4,6 +4,7 @@ extern crate serde_json;
 extern crate failure;
 
 use failure::Error;
+use std::fmt::Debug;
 
 mod hex_slice;
 pub use hex_slice::*;
@@ -43,6 +44,20 @@ pub trait HackatticChallenge {
                 .send()?;
             Ok(format!("{}", response.text()?))
         }
+
+    fn process_challenge() -> Result<(), Error>
+        where Self::Problem : serde::de::DeserializeOwned + Debug, Self::Solution : serde::Serialize + Debug
+    {
+        println!("processing challenge \"{}\"", Self::challenge_name());
+        let mut client = make_reqwest_client()?;
+        let problem = Self::get_problem(&mut client)?;
+        println!("got problem: {:?}", problem);
+        let solution = Self::make_solution(problem)?;
+        println!("got solution: {:?}", solution);
+        let response = Self::send_solution(solution, &mut client)?;
+        println!("got response: {}", response);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

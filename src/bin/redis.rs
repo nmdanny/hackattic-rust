@@ -1,15 +1,16 @@
 extern crate hackattic;
-extern crate rdb;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 extern crate serde;
 extern crate failure;
+extern crate rdb_parser;
 
-use hackattic::{HackatticChallenge, make_reqwest_client, from_base64};
-use failure::Error;
-use std::io::{Read, BufReader};
+use hackattic::{HackatticChallenge, from_base64};
+use failure::{Error, ResultExt};
+use rdb_parser::types::RedisValue;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 struct Problem {
     #[serde(deserialize_with = "from_base64")]
     rdb: Vec<u8>,
@@ -21,39 +22,61 @@ struct Requirements {
     check_type_of: String
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 struct Answer {
-    db_count: u64,
+    db_count: usize,
     emoji_key_value: String,
     expiry_millis: u64,
-    #[serde(rename = "$check_type_of")]
-    check_type_of: String
+    check_type_of: CustomName<String>
 }
 
-fn main() {
-    match main_err() {
-        Ok(_) => (),
-        Err(e) => panic!(format!("{:?}", e))
+// TODO: not really related to this exercise, but find a better way of dynamically
+// renaming a field for serializing
+#[derive(Debug, Clone)]
+struct CustomName<T: serde::Serialize>{
+    name: String,
+    value: T
+}
+impl <T: serde::Serialize> std::ops::Deref for CustomName<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
+impl serde::Serialize for Answer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+        S: serde::Serializer {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(4))?;
+        map.serialize_entry("db_count", &self.db_count)?;
+        map.serialize_entry("emoji_key_value", &self.emoji_key_value)?;
+        map.serialize_entry("expiry_millis", &self.expiry_millis)?;
+        map.serialize_entry(&self.check_type_of.name, &self.check_type_of.value)?;
+        map.end()
+    }
+}
+
+fn main() {
+    main_err().unwrap();
+}
+
 fn main_err() -> Result<(), Error> {
-    let mut client = make_reqwest_client()?;
-    let problem = Redis::get_problem(&mut client)?;
-    println!("Problem is {:?}", problem);
-    let solution = Redis::make_solution(problem)?;
+    Redis::process_challenge()?;
     Ok(())
 }
 
-fn parse_rdb(data: &[u8]) -> rdb::RdbOk {
-    let mut data_vec = data.to_owned();
-    let correct_string = b"REDIS".iter().cloned();
-    // replace the first 5 bytes(containig 'MYSQL') with 'REDIS'
-    let wrong_header = data_vec.splice(..5, correct_string).collect::<Vec<u8>>();
-    println!("wrong header is {}", String::from_utf8_lossy(&wrong_header));
-    let reader = BufReader::new(&data_vec[..]);
-    rdb::parse(reader, rdb::formatter::JSON::new(), rdb::filter::Simple::new())
+fn fix_rdb_header(data: &mut Vec<u8>) {
+    let fixed_header = b"REDIS".iter().cloned();
+    data.splice(..5, fixed_header).collect::<Vec<_>>();
 }
+
+// According to https://en.wikipedia.org/wiki/Emoticons_(Unicode_block)
+// BUG: doesn't seem to include some emojis
+fn is_emoji_codepoint(ch: char) -> bool {
+    ch >= '\u{1f600}' && ch <= '\u{1f64f}'
+}
+
 
 struct Redis;
 impl HackatticChallenge for Redis {
@@ -62,10 +85,43 @@ impl HackatticChallenge for Redis {
     fn challenge_name() -> String {
         "the_redis_one".to_owned()
     }
-    fn make_solution(req: Problem) -> Result<Answer, Error> {
-        let rdb = parse_rdb(&req.rdb)?;
-        println!("rdb is {:?}",rdb);
-        unimplemented!()
+    fn make_solution(mut req: Problem) -> Result<Answer, Error> {
+        fix_rdb_header(&mut req.rdb);
+        let rdb: rdb_parser::types::RDB = rdb_parser::rdb(&req.rdb).to_result().unwrap();
+        let db_count = rdb.databases.len();
+        let mut emoji_key_value = String::from("TODO");
+        let mut expiry_millis = 0;
+        let mut check_type_of_value = String::from("TODO");
+        let mut found_duration = None;
+        for entry in rdb.databases.into_iter().flat_map(|d| d.entries) {
+            if let Some(duration) = entry.expiry {
+                found_duration = Some(duration);
+                expiry_millis = duration.as_secs() * 1000 + (duration.subsec_nanos() as u64) / 1000000;
+            }
+            if String::from_utf8_lossy(&entry.key).chars().any(is_emoji_codepoint) {
+                emoji_key_value = format!("{}", entry.value);
+            }
+            if String::from_utf8_lossy(&entry.key) == req.requirements.check_type_of {
+                check_type_of_value = match entry.value {
+                    RedisValue::String(_) => String::from("string"),
+                    RedisValue::List(_) => String::from("list"),
+                    RedisValue::Hash(_) => String::from("hash"),
+                    RedisValue::Set(_) => String::from("set"),
+                    RedisValue::SortedSet(_) => String::from("sortedset"),
+                }
+            }
+        }
+        println!("Found duration: {:?}", found_duration);
+        let answer = Answer {
+            db_count,
+            emoji_key_value,
+            expiry_millis,
+            check_type_of: CustomName {
+                name: String::from(req.requirements.check_type_of),
+                value: check_type_of_value
+            }
+        };
+        Ok(answer)
     }
 
 }

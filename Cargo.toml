@@ -20,6 +20,7 @@ redis = "0.8.0"
 trust-dns-server = "0.13.0"
 trust-dns-proto = "0.2.0"
 rdb-parser = { git = "https://github.com/nmdanny/rdb-parser.git"}
+diesel = "1.0.0"
 
 [dependencies.openssl]
 version = "0.9.23"

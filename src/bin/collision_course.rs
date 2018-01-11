@@ -57,7 +57,7 @@ fn main_err() -> Result<(), Error> {
 fn create_collision(mut include: &[u8]) -> Result<(Vec<u8>, Vec<u8>), Error> {
     let mut prefix_file = tempfile::NamedTempFile::new()?;
     prefix_file.write_all(&mut include)?;
-    let cmd = std::process::Command::new("fastcoll_v1.0.0.5.exe")
+    let cmd = std::process::Command::new("extra/collision_course/fastcoll_v1.0.0.5.exe")
         .arg("-p")
         .arg(prefix_file.path())
         .output()?;

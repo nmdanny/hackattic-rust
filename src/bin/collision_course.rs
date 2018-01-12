@@ -40,19 +40,9 @@ impl <'a> From<&'a [u8]> for Base64 {
     }
 }
 fn main() {
-    main_err().unwrap();
+    CollisionCourse::process_challenge().unwrap();
 }
 
-fn main_err() -> Result<(), Error> {
-    let mut client = make_reqwest_client()?;
-    let prob = CollisionCourse::get_problem(&mut client)?;
-    println!("Problem: {:?}", prob);
-    let ans = CollisionCourse::make_solution(prob)?;
-    // println!("Answer: {:?}", ans);
-    let resp = CollisionCourse::send_solution(ans, &mut client)?;
-    println!("Hackattic response: {}", resp);
-    Ok(())
-}
 
 fn create_collision(mut include: &[u8]) -> Result<(Vec<u8>, Vec<u8>), Error> {
     let mut prefix_file = tempfile::NamedTempFile::new()?;
@@ -77,10 +67,10 @@ struct CollisionCourse;
 impl HackatticChallenge for CollisionCourse {
     type Problem = Problem;
     type Solution = Solution;
-    fn challenge_name() -> String {
-        "collision_course".to_owned()
+    fn challenge_name() -> &'static str {
+        "collision_course"
     }
-    fn make_solution(req: Problem) -> Result<Solution, Error> {
+    fn make_solution(req: &Problem) -> Result<Solution, Error> {
         let (file0, file1) = create_collision(req.include.as_bytes())?;
         Ok(Solution {
             files: vec![Base64::from(file0), Base64::from(file1)]

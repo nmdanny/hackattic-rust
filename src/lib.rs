@@ -34,8 +34,8 @@ pub fn make_reqwest_client() -> Result<reqwest::Client, Error>  {
 pub trait HackatticChallenge {
     type Problem;
     type Solution;
-    fn make_solution(problem: Self::Problem) -> Result<Self::Solution, Error>;
-    fn challenge_name() -> String;
+    fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error>;
+    fn challenge_name() -> &'static str;
     fn get_problem(client: &mut reqwest::Client) -> Result<Self::Problem, Error>
         where Self::Problem : serde::de::DeserializeOwned 
     {
@@ -45,10 +45,10 @@ pub trait HackatticChallenge {
         let problem = serde_json::from_reader(problem_json)?;
         Ok(problem)
     }
-    fn send_solution(solution: Self::Solution, client: &mut reqwest::Client) -> Result<String, Error>
+    fn send_solution(solution: &Self::Solution, client: &mut reqwest::Client) -> Result<String, Error>
         where Self::Solution : serde::Serialize {
             let mut response = client.post(&format!("https://hackattic.com/challenges/{}/solve?access_token={}", Self::challenge_name(), ACCESS_TOKEN))
-                .json(&solution)
+                .json(solution)
                 .send()?;
             Ok(format!("{}", response.text()?))
         }
@@ -60,9 +60,9 @@ pub trait HackatticChallenge {
         let mut client = make_reqwest_client()?;
         let problem = Self::get_problem(&mut client)?;
         println!("got problem: {:?}", problem);
-        let solution = Self::make_solution(problem)?;
+        let solution = Self::make_solution(&problem)?;
         println!("got solution: {:?}", solution);
-        let response = Self::send_solution(solution, &mut client)?;
+        let response = Self::send_solution(&solution, &mut client)?;
         println!("got response: {}", response);
         Ok(())
     }

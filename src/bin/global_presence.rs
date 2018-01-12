@@ -47,7 +47,7 @@ struct Answer {
 
 
 fn main() {
-    main_err().unwrap();
+    GlobalPresence::process_challenge().unwrap();
 }
 
 fn call_with_proxy(presence_token: &str, proxy: &str ) -> Result<String, Error> {
@@ -60,11 +60,11 @@ fn call_with_proxy(presence_token: &str, proxy: &str ) -> Result<String, Error> 
     Ok(st)
 }
 
-fn coordinate_https(token: String) -> Result<(), Error> {
+fn coordinate_https(token: &str) -> Result<(), Error> {
     let (tx, rx) = mpsc::channel();
     for &proxy in PROXIES.iter() {
         let tx = tx.clone();
-        let token = token.clone();
+        let token = token.to_owned();
         thread::spawn(move || {
             let res = call_with_proxy(&token, &proxy);
             tx.send(res).unwrap();
@@ -91,24 +91,15 @@ fn coordinate_https(token: String) -> Result<(), Error> {
 }
 
 
-fn main_err() -> Result<(), Error> {
-    let mut client = make_reqwest_client()?;
-    let prob = GlobalPresence::get_problem(&mut client)?;
-    let ans = GlobalPresence::make_solution(prob)?;
-    let resp = GlobalPresence::send_solution(ans, &mut client)?;
-    println!("Hackattic response: {}", resp);
-    Ok(())
-}
-
 struct GlobalPresence;
 impl HackatticChallenge for GlobalPresence {
     type Problem = Problem;
     type Solution = Answer;
-    fn challenge_name() -> String {
-        "a_global_presence".to_owned()
+    fn challenge_name() -> &'static str {
+        "a_global_presence"
     }
-    fn make_solution(req: Problem) -> Result<Answer, Error> {
-        coordinate_https(req.presence_token)?;
+    fn make_solution(req: &Problem) -> Result<Answer, Error> {
+        coordinate_https(&req.presence_token)?;
         Ok(Answer {})
     }
 

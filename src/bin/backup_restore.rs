@@ -25,7 +25,7 @@ struct Solution {
 }
 
 fn main() {
-    main_err().unwrap();
+    BackupRestore::process_challenge().unwrap();
 }
 
 fn main_err() -> Result<(), Error> {
@@ -49,10 +49,10 @@ struct BackupRestore;
 impl HackatticChallenge for BackupRestore {
     type Problem = Problem;
     type Solution = Solution;
-    fn challenge_name() -> String {
-        "backup_restore".to_owned()
+    fn challenge_name() -> &'static str {
+        "backup_restore"
     }
-    fn make_solution(req: Problem) -> Result<Solution, Error> {
+    fn make_solution(req: &Problem) -> Result<Solution, Error> {
         load_db(&req.dump)?;
         Ok(Solution {
             alive_ssns: vec![]

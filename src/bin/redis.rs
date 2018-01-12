@@ -58,12 +58,7 @@ impl serde::Serialize for Answer {
 }
 
 fn main() {
-    main_err().unwrap();
-}
-
-fn main_err() -> Result<(), Error> {
-    Redis::process_challenge()?;
-    Ok(())
+    Redis::process_challenge().unwrap();
 }
 
 fn fix_rdb_header(data: &mut Vec<u8>) {
@@ -82,12 +77,13 @@ struct Redis;
 impl HackatticChallenge for Redis {
     type Problem = Problem;
     type Solution = Answer;
-    fn challenge_name() -> String {
-        "the_redis_one".to_owned()
+    fn challenge_name() -> &'static str {
+        "the_redis_one"
     }
-    fn make_solution(mut req: Problem) -> Result<Answer, Error> {
-        fix_rdb_header(&mut req.rdb);
-        let rdb: rdb_parser::types::RDB = rdb_parser::rdb(&req.rdb).to_result().unwrap();
+    fn make_solution(req: &Problem) -> Result<Answer, Error> {
+        let mut rdb = req.rdb.to_owned();
+        fix_rdb_header(&mut rdb);
+        let rdb: rdb_parser::types::RDB = rdb_parser::rdb(&rdb).to_result().unwrap();
         let db_count = rdb.databases.len();
         let mut emoji_key_value = String::from("TODO");
         let mut expiry_millis = 0;
@@ -101,7 +97,7 @@ impl HackatticChallenge for Redis {
             if String::from_utf8_lossy(&entry.key).chars().any(is_emoji_codepoint) {
                 emoji_key_value = format!("{}", entry.value);
             }
-            if String::from_utf8_lossy(&entry.key) == req.requirements.check_type_of {
+            if &entry.key == &req.requirements.check_type_of.as_bytes() {
                 check_type_of_value = match entry.value {
                     RedisValue::String(_) => String::from("string"),
                     RedisValue::List(_) => String::from("list"),
@@ -117,7 +113,7 @@ impl HackatticChallenge for Redis {
             emoji_key_value,
             expiry_millis,
             check_type_of: CustomName {
-                name: String::from(req.requirements.check_type_of),
+                name: req.requirements.check_type_of.to_owned(),
                 value: check_type_of_value
             }
         };

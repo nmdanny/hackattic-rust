@@ -107,10 +107,10 @@ struct PasswordHashing;
 impl HackatticChallenge for PasswordHashing {
     type Problem = Problem;
     type Solution = Answer;
-    fn challenge_name() -> String {
-        "password_hashing".to_owned()
+    fn challenge_name() -> &'static str {
+        "password_hashing"
     }
-    fn make_solution(req: Problem) -> Result<Answer, Error> {
+    fn make_solution(req: &Problem) -> Result<Answer, Error> {
         let answer = Answer {
             sha256: req.digest_sha256(),
             hmac: req.hmac()?,
@@ -122,21 +122,7 @@ impl HackatticChallenge for PasswordHashing {
 }
 
 fn main() {
-    match main_err() {
-        Ok(_) => (),
-        Err(e) => panic!(format!("{:?}", e))
-    }
-}
-
-fn main_err() -> Result<(), Error> {
-    let mut client = make_reqwest_client()?;
-    let problem = PasswordHashing::get_problem(&mut client)?;
-    println!("problem is {:?}", problem);
-    let solution = PasswordHashing::make_solution(problem)?;
-    println!("solution is {:?}", solution);
-    let response = PasswordHashing::send_solution(solution, &mut client)?;
-    println!("response is {}", response);
-    Ok(())
+    PasswordHashing::process_challenge().unwrap();
 }
 
 #[test]

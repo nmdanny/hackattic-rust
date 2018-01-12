@@ -38,7 +38,7 @@ struct Answer {
     certificate: String // base-64 DER encoded certificate(not a PEM although similar)
 }
 
-fn create_certificate(inputs: CertRequirements) -> Result<X509, Error> {
+fn create_certificate(inputs: &CertRequirements) -> Result<X509, Error> {
     let mut builder = X509Builder::new()?;
     let serial_number = BigNum::from_hex_str(&inputs.required_data.serial_number[2..])?.to_asn1_integer()?;
     builder.set_serial_number(&serial_number)?;
@@ -101,37 +101,22 @@ fn x509_to_answer(cert: X509) -> Result<Answer, Error> {
 }
 
 fn main() {
-    match main_err() {
-        Ok(_) => (),
-        Err(e) => panic!(format!("{:?}", e))
-    }
+    TalesOfSsl::process_challenge().unwrap();
 }
 
 struct TalesOfSsl;
 impl HackatticChallenge for TalesOfSsl {
     type Problem = CertRequirements;
     type Solution = Answer;
-    fn challenge_name() -> String {
-        "tales_of_ssl".to_owned()
+    fn challenge_name() -> &'static str {
+        "tales_of_ssl"
     }
-    fn make_solution(req: CertRequirements) -> Result<Answer, ::failure::Error> {
-        let x509 = create_certificate(req)?;
+    fn make_solution(req: &CertRequirements) -> Result<Answer, ::failure::Error> {
+        let x509 = create_certificate(&req)?;
         dump_cert_to_file(&x509)?;
         let answer = x509_to_answer(x509)?;
         Ok(answer)
     }
-}
-
-fn main_err() -> Result<(), Error> {
-    let mut client = make_reqwest_client()?;
-    let req = TalesOfSsl::get_problem(&mut client)?;
-    println!("Problem is {:?}", req);
-    let answer = TalesOfSsl::make_solution(req)?;
-    println!("Solution is {:?}", answer);
-    let response = TalesOfSsl::send_solution(answer, &mut client)?;
-    println!("Response is {}", response);
-    Ok(())
-
 }
 
 #[test]
@@ -172,6 +157,6 @@ jyA9qXqpWbpYDVmP6NaKewg8xWqPusJXzjeP8m0rIh2Huu8WdNs=
             country: "Tokelau Islands".to_owned()
         }
     };
-    let cert = create_certificate(req);
+    let cert = create_certificate(&req);
     assert!(cert.is_ok(), "Failed to create certificate");
 }

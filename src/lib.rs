@@ -6,6 +6,8 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 extern crate cv;
+#[macro_use]
+extern crate lazy_static;
 
 use failure::Error;
 use std::fmt::Debug;
@@ -19,7 +21,16 @@ pub use serde_utils::*;
 pub mod visual_basic_math;
 pub mod face_detect;
 
-pub static ACCESS_TOKEN: &str = "ACCESS_TOKEN_HERE";
+
+lazy_static! {
+    static ref ACCESS_TOKEN: String = {
+        let token = std::env::var("HACKATTIC_ACCESS_TOKEN");
+        if token.is_err() {
+            panic!("Missing HACKATTIC_ACCESS_TOKEN environment variable.")
+        }
+        token.unwrap_or("MISSING_HACKATTIC_ACCESS_TOKEN".to_owned())
+    };
+}
 
 
 pub fn make_reqwest_client() -> Result<reqwest::Client, Error>  {
@@ -40,14 +51,14 @@ pub trait HackatticChallenge {
         where Self::Problem : serde::de::DeserializeOwned 
     {
         let problem_json = client
-            .get(&format!("https://hackattic.com/challenges/{}/problem?access_token={}", Self::challenge_name(), ACCESS_TOKEN))
+            .get(&format!("https://hackattic.com/challenges/{}/problem?access_token={}", Self::challenge_name(), &*ACCESS_TOKEN))
             .send()?;
         let problem = serde_json::from_reader(problem_json)?;
         Ok(problem)
     }
     fn send_solution(solution: &Self::Solution, client: &mut reqwest::Client) -> Result<String, Error>
         where Self::Solution : serde::Serialize {
-            let mut response = client.post(&format!("https://hackattic.com/challenges/{}/solve?access_token={}", Self::challenge_name(), ACCESS_TOKEN))
+        let mut response = client.post(&format!("https://hackattic.com/challenges/{}/solve?access_token={}", Self::challenge_name(), &*ACCESS_TOKEN))
                 .json(solution)
                 .send()?;
             Ok(format!("{}", response.text()?))

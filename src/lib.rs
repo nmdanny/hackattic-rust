@@ -1,15 +1,23 @@
 extern crate reqwest;
-extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
+extern crate serde;
+#[macro_use]
 extern crate failure;
+extern crate cv;
 
 use failure::Error;
 use std::fmt::Debug;
 
+/* utility libraries useful for many challenges */
 mod hex_slice;
 pub use hex_slice::*;
 mod serde_utils;
 pub use serde_utils::*;
+/* modules corresponding to specific challenges */
+pub mod visual_basic_math;
+pub mod face_detect;
 
 pub static ACCESS_TOKEN: &str = "ACCESS_TOKEN_HERE";
 
@@ -58,11 +66,5 @@ pub trait HackatticChallenge {
         println!("got response: {}", response);
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
 }

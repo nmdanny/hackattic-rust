@@ -28,20 +28,18 @@ impl HackatticChallenge for FaceDetection {
     type Problem = Problem;
     type Solution = Solution;
 
-    fn make_solution(problem: Self::Problem) -> Result<Self::Solution, Error> {
-        let mut image_buf = {
+    fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error> {
+        let image_buf = {
             let mut res = reqwest::get(&problem.image_url)?;
             let mut buf = Vec::new();
             res.read_to_end(&mut buf)?;
             buf
         };
-        let mut face_recs = detection::detect_faces(&image_buf)?;
+        let face_recs = detection::detect_faces(&image_buf)?;
         Ok(Solution {
             face_tiles: face_recs.iter().map(face_rect_to_usize).collect()
         })
     }
 
-    fn challenge_name() -> String {
-        "basic_face_detection".to_owned()
-    }
+    fn challenge_name() -> &'static str { "basic_face_detection" }
 }

@@ -1,16 +1,16 @@
-extern crate reqwest;
+extern crate hackattic;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 #[macro_use]
 extern crate serde_json;
 extern crate ring;
-extern crate hackattic;
+extern crate failure;
 
 use serde_json::Value;
-use std::error::Error;
 use ring::digest::{SHA256, digest};
-use hackattic::ACCESS_TOKEN;
+use hackattic::HackatticChallenge;
+use failure::Error;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Problem {
@@ -36,7 +36,7 @@ fn hash_block(block: &Block) -> Vec<u8> {
     digest.as_ref().to_owned()
 }
 
-fn solve_problem(mut problem: Problem) -> Result<Answer, Box<Error>> {
+fn solve_problem(problem: &mut Problem) -> Result<Answer, Error> {
     problem.block.nonce = Some(0);
     loop {
         let block_hash = hash_block(&problem.block);
@@ -63,24 +63,22 @@ fn test_hash(hash: &[u8], mut difficulty: usize) -> bool {
 
 
 fn main() {
-    match main_err() {
-        Ok(_) => (),
-        Err(e) => panic!(format!("{:?}", e))
-    }
+    MiniMiner::process_challenge().unwrap();
 }
 
-fn main_err() -> Result<(), Box<Error>> {
-    let problem_json = reqwest::get(&format!("https://hackattic.com/challenges/mini_miner/problem?access_token={}", ACCESS_TOKEN))?;
-    let problem: Problem = serde_json::from_reader(problem_json)?;
-    println!("Got problem {:?}", problem);
-    let answer = solve_problem(problem)?;
-    println!("Answer is {:?}", answer);
-    let client = reqwest::Client::new();
-    let response = client.post(&format!("https://hackattic.com/challenges/mini_miner/solve?access_token={}", ACCESS_TOKEN))
-        .json(&answer)
-        .send()?;
-    println!("Response is {:?}", response);
-    Ok(())
+struct MiniMiner;
+impl HackatticChallenge for MiniMiner {
+    type Problem = Problem;
+    type Solution = Answer;
+
+    fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error> {
+        let mut problem = problem.clone();
+        solve_problem(&mut problem)
+    }
+
+    fn challenge_name() -> &'static str {
+        "mini_miner"
+    }
 }
 
 #[test]
@@ -113,7 +111,7 @@ fn can_deserialize_problem() {
             ]
           }     
     });
-    let p: Problem = serde_json::from_value(json).unwrap();
+    serde_json::from_value::<Problem>(json).unwrap();
 }
 
 #[test]

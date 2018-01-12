@@ -18,7 +18,7 @@ use openssl::asn1::Asn1Time;
 use openssl::bn::BigNum;
 use openssl::pkey::PKey;
 use openssl::hash::MessageDigest;
-use hackattic::{make_reqwest_client, HackatticChallenge};
+use hackattic::HackatticChallenge;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CertRequirements {

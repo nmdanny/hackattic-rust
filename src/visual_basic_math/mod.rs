@@ -9,14 +9,14 @@ pub mod ocr;
 #[derive(Debug, PartialEq)]
 struct Expression {
     operation: Operation,
-    number: i32
+    number: i64
 }
 
 impl Expression {
     fn from_line(line: &str) -> Result<Self, ParseError> {
         let (op, num) = line.split_at(1);
         let operation = Operation::from_str(op).ok_or(ParseError::UnknownOperation { operation: op.to_owned() })?;
-        let number = num.parse::<i32>().map_err(ParseError::NotANumber)?;
+        let number = num.chars().filter(|c| c.is_digit(10)).collect::<String>().parse::<i64>().map_err(ParseError::NotANumber)?;
         Ok(Expression {
             operation, number
         })
@@ -25,7 +25,7 @@ impl Expression {
         input.trim().lines().map(Expression::from_line).collect()
 
     }
-    fn fold_expressions(exprs: &[Expression]) -> i32 {
+    fn fold_expressions(exprs: &[Expression]) -> i64 {
         exprs.iter().fold(0, |acc, expr| expr.operation.apply(acc, expr.number))
     }
 }
@@ -41,12 +41,12 @@ impl Operation {
             "+" => Some(Operation::Plus),
             "-" | "—" => Some(Operation::Minus),
             "x" | "×" | "*" => Some(Operation::Mult),
-            "/" | "÷"  => Some(Operation::Div),
+            "/" | "÷" => Some(Operation::Div),
             _ => None
         }
     }
 
-    fn apply(&self, op0: i32, op1: i32) -> i32 {
+    fn apply(&self, op0: i64, op1: i64) -> i64 {
         match self {
             &Operation::Plus => op0 + op1,
             &Operation::Minus => op0 - op1,
@@ -71,7 +71,7 @@ struct Problem {
 
 #[derive(Debug, Clone, Serialize)]
 struct Solution {
-    result: i32
+    result: i64
 }
 
 pub fn main() {

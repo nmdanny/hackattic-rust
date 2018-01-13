@@ -16,20 +16,26 @@ use std::path::PathBuf;
 
 pub fn image_to_text(image: &[u8]) -> Result<String, Error> {
     let tess = Command::new("tesseract")
-        .args(&["stdin", "stdout", "--oem", "0", "--psm", "11", "-l", "eng",
+        .args(&["stdin", "stdout", "--oem", "1", "--psm", "4", "-l", "eng",
                 "-c", "tessedit_char_whitelist=0123456789+-÷×", "stdout"])
-        .env("TESSDATA_PREFIX", "./extra/visual_basic_math/v3_traineddata")
+        .env("TESSDATA_PREFIX", "./extra/visual_basic_math/trained")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()?;
     tess.stdin.unwrap().write_all(image)?;
     let mut string = String::new();
     tess.stdout.unwrap().read_to_string(&mut string)?;
-    string = string.replace(" ","");
+    string = string.replace(" ","")
+        .replace("├╖", "/")
+        .replace("÷", "/")
+        .replace("├ק", "*")
+        .replace("├", "*")
+        .replace("×", "*");
     let lines = string
         .lines()
         .filter(|l| l.trim().len() > 0)
-        .collect::<Vec<&str>>();
+        .map(|line| line.chars().take(1).chain(line.chars().skip(1).filter(|c| c.is_digit(10))).collect::<String>())
+        .collect::<Vec<_>>();
     let string = lines.join("\n");
     println!("OCR result is:\n{}",string);
     Ok(string)

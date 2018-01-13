@@ -28,6 +28,7 @@ use hackattic::{HackatticChallenge, make_reqwest_client};
 use failure::{Error, ResultExt};
 use trust_dns_proto::rr::{Record, RecordType, RData, Name};
 use trust_dns_proto::rr::rdata::{TXT, NULL, SOA};
+use trust_dns_proto::serialize::binary::{BinSerializable, BinEncoder};
 use trust_dns_server::ServerFuture;
 use trust_dns_server::authority::{Authority, Catalog, ZoneType};
 use futures::Future;
@@ -47,6 +48,41 @@ struct ProblemRecord {
     data: String
 }
 
+// TrustDNS doesn't support RP, so we manually handle RData creation here
+// see https://tools.ietf.org/html/rfc1183#section-2.2
+// consists of the following fields, both required
+fn make_rp_rdata(mailbox: &str) -> RData {
+    // using mailbox encoding (see rname @ create_soa)
+    let mbox_dname = Name::from_str(mailbox).unwrap();
+    // associated TXT RR. Use root when none is available
+    let txt_dname = Name::root();
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = BinEncoder::new(&mut bytes);
+        mbox_dname.emit(&mut encoder).unwrap();
+        txt_dname.emit(&mut encoder).unwrap();
+    }
+    RData::Unknown {
+        code: 17, rdata: NULL::with(bytes)
+    }
+
+}
+
+// This is an ugly hack, because TrustDNS doesn't support wildcard records
+// https://github.com/bluejekyll/trust-dns/issues/30
+// Hackattic will sometimes ask for "extra.label.label" under the wildcard, so we
+// can simply replace "*" with "extra".
+// If you get an error "we asked for woot/w00t/etc, simply re-run this challenge
+// until it asks for "extra" and it'll pass.
+fn patch_wildcard_name_for_challenge(name: &mut Name) {
+    let mut st = name.to_string();
+    if st.contains("*") {
+        st = st.replace("*","extra");
+        *name = Name::from_str(&st).unwrap();
+        error!("Found wildcard, patched with extra, name is now {:?}", name);
+    }
+}
+
 impl ProblemRecord {
     fn as_record(&self) -> Result<Record, Error>{
         let _type = if &self._type == "RP" {
@@ -54,22 +90,13 @@ impl ProblemRecord {
         } else {
             RecordType::from_str(&self._type).unwrap()
         };
-        let name = Name::from_str(&self.name).unwrap();
+        let mut name = Name::from_str(&self.name).unwrap();
+        patch_wildcard_name_for_challenge(&mut name);
         let rdata = match _type {
             RecordType::A => RData::A(Ipv4Addr::from_str(&self.data)?),
             RecordType::AAAA => RData::AAAA(Ipv6Addr::from_str(&self.data)?),
             RecordType::TXT => RData::TXT(TXT::new(vec![self.data.clone()])),
-            RecordType::Unknown(17) => {
-                // TrustDNS doesn't support RP, so we manually create one here
-                // see https://tools.ietf.org/html/rfc1183#section-2.2
-                // RData fields are the following(both required)
-                // mbox-dname
-                // txt-dname
-                let mail = &self.data.to_owned().replace();
-                RData::Unknown {
-                    code: 17, rdata: NULL::with(self.data.as_bytes().to_vec())
-                }
-            },
+            RecordType::Unknown(17) => make_rp_rdata(&self.data),
             e => Err(format_err!("Unsupported RecordType {:?}", e))?
         };
         Ok(Record::from_rdata(name, 3600, _type, rdata))

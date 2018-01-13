@@ -39,7 +39,7 @@ impl Operation {
     fn from_str(c: &str) -> Option<Self> {
         match c {
             "+" => Some(Operation::Plus),
-            "-" => Some(Operation::Minus),
+            "-" | "—" => Some(Operation::Minus),
             "x" | "×" | "*" => Some(Operation::Mult),
             "/" | "÷"  => Some(Operation::Div),
             _ => None

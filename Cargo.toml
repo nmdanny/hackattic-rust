@@ -22,9 +22,11 @@ redis = "0.8.0"
 trust-dns-server = "0.13.0"
 trust-dns-proto = "0.2.0"
 rdb-parser = { git = "https://github.com/nmdanny/rdb-parser.git"}
-diesel = "1.0.0"
+postgres = "0.15"
 cv = { git = "https://github.com/nebgnahz/cv-rs.git" }
+flate2 = { version =  "1.0.1", features = ["zlib"], default-features = false }
 
 [dependencies.openssl]
 version = "0.9.23"
 features = ["v110"]
+

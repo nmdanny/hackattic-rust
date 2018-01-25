@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 extern crate hackattic;
 #[macro_use]
 extern crate serde_derive;
@@ -17,17 +15,14 @@ extern crate tokio_core;
 extern crate futures;
 
 use hackattic::HackatticChallenge;
-use failure::{Error, ResultExt};
 use std::time::{Instant, Duration};
-use std::rc::Rc;
-use tokio_core::reactor::{Core, Handle};
+use tokio_core::reactor::Core;
 use websocket::async::Client;
+use futures::{Future, Stream, Sink};
 use websocket::async::stream::{AsyncRead, AsyncWrite};
-use websocket::{ClientBuilder, Message, OwnedMessage};
-use futures::{Future, Stream, Sink, oneshot};
-use futures::future::{ok, err, loop_fn, Loop, LoopFn};
-use futures::sync::oneshot::{Sender, Receiver};
-use futures::stream::{SplitSink, SplitStream};
+use websocket::{ClientBuilder, OwnedMessage};
+use futures::future::{ok, err, loop_fn, Loop};
+use failure::Error;
 
 #[derive(Debug, Deserialize)]
 struct Problem {
@@ -140,10 +135,9 @@ impl HackatticChallenge for Websocket {
             }).map_err(|err| Error::from(err));
 
 
-        // core.handle().spawn(client_future);
         let secret = core.run(client_future)?;
         Ok(Solution {
-            secret: secret
+            secret
         })
     }
 

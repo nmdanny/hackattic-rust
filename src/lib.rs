@@ -5,6 +5,7 @@ extern crate serde_json;
 extern crate serde;
 #[macro_use]
 extern crate failure;
+#[cfg(opencv)]
 extern crate cv;
 #[macro_use]
 extern crate lazy_static;
@@ -19,6 +20,7 @@ mod serde_utils;
 pub use serde_utils::*;
 /* modules corresponding to specific challenges */
 pub mod visual_basic_math;
+#[cfg(opencv)]
 pub mod face_detect;
 
 

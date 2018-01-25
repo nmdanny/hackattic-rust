@@ -86,6 +86,10 @@ impl PingState {
         } else if message.contains("good!") {
             info!("Got good message, continuing");
             Box::new(ok(Loop::Continue((client, self))))
+        } else if message.contains("congratulations!") {
+            let secret = message.trim_left_matches("congratulations! the solution to this challenge is \"")
+                .trim_right_matches("\"");
+            Box::new(ok(Loop::Break(secret.to_owned())))
         } else {
             warn!("Got unknown message: {}, skipping", message);
             Box::new(ok(Loop::Continue((client, self))))

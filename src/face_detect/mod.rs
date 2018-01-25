@@ -1,3 +1,5 @@
+#![cfg(facedetect)]
+
 use super::HackatticChallenge;
 use reqwest;
 use failure::Error;

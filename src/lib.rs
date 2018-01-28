@@ -5,7 +5,7 @@ extern crate serde_json;
 extern crate serde;
 #[macro_use]
 extern crate failure;
-#[cfg(facedetect)]
+#[cfg(feature = "facedetect")]
 extern crate cv;
 #[macro_use]
 extern crate lazy_static;

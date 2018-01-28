@@ -19,7 +19,6 @@ base64-serde = "0.2.0"
 failure = "0.1.1"
 rdb = "0.2.1"
 tempfile = "2.2.0"
-redis = "0.8.0"
 tokio-core = "0.1"
 trust-dns-server = "0.13.0"
 trust-dns-proto = "0.2.0"
@@ -28,8 +27,8 @@ env_logger = "0.5.0-rc.2"
 pretty_env_logger = "0.2.0-rc.2"
 ansi_term = "0.10.2"
 rdb-parser = { git = "https://github.com/nmdanny/rdb-parser.git"}
-openssl = { version = "0.9.23", features = ["v110"]}
-postgres = "0.15"
+openssl = { version = "0.9.23", features = ["v110"], optional = false}
+postgres = { version = "0.15", optional = false }
 cv = { git = "https://github.com/nebgnahz/cv-rs.git", optional = true }
 flate2 = { version =  "1.0.1", features = ["zlib"], default-features = false }
 websocket = "0.20.2"
@@ -37,3 +36,5 @@ websocket = "0.20.2"
 [features]
 default = []
 facedetect = ["cv"]
+#backuprestore = ["postgres"]
+#ssl = ["openssl"]

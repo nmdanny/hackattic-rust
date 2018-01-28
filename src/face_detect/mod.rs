@@ -1,10 +1,11 @@
-#![cfg(facedetect)]
+#![cfg(feature = "facedetect")]
 
 use super::HackatticChallenge;
 use reqwest;
 use failure::Error;
 use std::io::Read;
 use cv::Rect;
+
 
 pub mod detection;
 

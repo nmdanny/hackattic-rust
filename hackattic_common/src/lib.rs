@@ -5,10 +5,10 @@ extern crate serde_json;
 extern crate serde;
 #[macro_use]
 extern crate failure;
-#[cfg(feature = "facedetect")]
-extern crate cv;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
 
 use failure::Error;
 use std::fmt::Debug;
@@ -18,9 +18,6 @@ mod hex_slice;
 pub use hex_slice::*;
 mod serde_utils;
 pub use serde_utils::*;
-/* modules corresponding to specific challenges */
-pub mod visual_basic_math;
-pub mod face_detect;
 
 
 lazy_static! {
@@ -32,7 +29,6 @@ lazy_static! {
         token.unwrap_or("MISSING_HACKATTIC_ACCESS_TOKEN".to_owned())
     };
 }
-
 
 pub fn make_reqwest_client() -> Result<reqwest::Client, Error>  {
     let mut builder = reqwest::Client::builder();
@@ -68,14 +64,14 @@ pub trait HackatticChallenge {
     fn process_challenge() -> Result<(), Error>
         where Self::Problem : serde::de::DeserializeOwned + Debug, Self::Solution : serde::Serialize + Debug
     {
-        println!("processing challenge \"{}\"", Self::challenge_name());
+        info!("processing challenge \"{}\"", Self::challenge_name());
         let mut client = make_reqwest_client()?;
         let problem = Self::get_problem(&mut client)?;
-        println!("got problem: {:?}", problem);
+        debug!("got problem: {:?}", problem);
         let solution = Self::make_solution(&problem)?;
-        println!("got solution: {:?}", solution);
+        debug!("sending solution: {:?}", solution);
         let response = Self::send_solution(&solution, &mut client)?;
-        println!("got response: {}", response);
+        debug!("got response: {}", response);
         Ok(())
     }
 

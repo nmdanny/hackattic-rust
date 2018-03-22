@@ -4,44 +4,7 @@ version = "0.1.0"
 authors = ["NMDanny <nmdanny@gmail.com>"]
 
 [dependencies]
-byteorder = "1.2.1"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
-futures = "0.1.17"
-futures-cpupool = "0.1.8"
-lazy_static = "1.0"
-ring = "0.12.1"
-reqwest = "0.8.1"
-base64 = "0.8.0"
-hex = "0.3.1"
-base64-serde = "0.2.0"
-failure = "0.1.1"
-rdb = "0.2.1"
-tempfile = "2.2.0"
-tokio-core = "0.1"
-trust-dns-server = "0.13.0"
-trust-dns-proto = "0.2.0"
-log = "0.4"
-env_logger = "0.5.0-rc.2"
-pretty_env_logger = "0.2.0-rc.2"
-ansi_term = "0.10.2"
-rdb-parser = { git = "https://github.com/nmdanny/rdb-parser.git"}
-openssl = { version = "0.9.23", features = ["v110"], optional = true}
-postgres = { version = "0.15", optional = false }
-cv = { git = "https://github.com/nebgnahz/cv-rs.git", optional = true }
-flate2 = { version =  "1.0.1", features = ["zlib"], default-features = false }
-websocket = "0.20.2"
-duct = "0.10.0"
-duct_sh = "0.1.0"
-rustyline = "1.0.0"
-
+hackattic_common = { path = "hackattic_common" }
 hosting_git = { path = "hosting_git" }
-
-[features]
-default = []
-facedetect = ["cv"]
-#backuprestore = ["postgres"]
-ssl = ["openssl"]
 
 [workspace]

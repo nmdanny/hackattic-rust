@@ -5,7 +5,6 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate serde;
 
-#[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate duct;
@@ -17,11 +16,9 @@ extern crate ansi_term;
 extern crate pretty_env_logger;
 extern crate reqwest;
 
-use duct::cmd;
-use std::process::{Command, Output};
-use std::io::{Write, Read};
+use std::io::Read;
 use hackattic_common::{HackatticChallenge, make_reqwest_client};
-use failure::{Error, ResultExt, Fail};
+use failure::{Error, Fail};
 use std::path::PathBuf;
 use shell_escape::escape;
 
@@ -104,7 +101,6 @@ fn setup_git_server(problem: &Problem) -> Result<TempUser, Error> {
 }
 
 fn extract_solution_from_git(problem: &Problem, user: &TempUser) -> Result<String, Error> {
-    use std::io::Read;
 
     let user_home = cmd!("sudo", "-u", &user.name, "sh", "-c", "echo $HOME").read()?;
     let repo_path = PathBuf::from(user_home).join(&problem.repo_path);

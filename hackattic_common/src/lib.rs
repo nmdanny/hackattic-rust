@@ -22,11 +22,22 @@ pub use serde_utils::*;
 
 lazy_static! {
     static ref ACCESS_TOKEN: String = {
-        let token = std::env::var("HACKATTIC_ACCESS_TOKEN");
-        if token.is_err() {
+        let token = std::env::var_os("HACKATTIC_ACCESS_TOKEN");
+        if let Some(token) = token {
+            token.to_string_lossy().into_owned()
+        } else {
             panic!("Missing HACKATTIC_ACCESS_TOKEN environment variable.")
         }
-        token.unwrap_or("MISSING_HACKATTIC_ACCESS_TOKEN".to_owned())
+    };
+
+    static ref REPEAT: bool = {
+        if let Some(_) = std::env::var_os("HACKATTIC_RETRY") {
+            debug!("HACKATTIC_RETRY is set, will force checking of solved challenges.");
+            true
+        } else {
+            debug!("HACKATTIC_RETRY isn't set, solved challenges won't be checked.");
+            false
+        }
     };
 }
 
@@ -55,7 +66,8 @@ pub trait HackatticChallenge {
     }
     fn send_solution(solution: &Self::Solution, client: &mut reqwest::Client) -> Result<String, Error>
         where Self::Solution : serde::Serialize {
-        let mut response = client.post(&format!("https://hackattic.com/challenges/{}/solve?access_token={}", Self::challenge_name(), &*ACCESS_TOKEN))
+            let playground = if *REPEAT { "&playground=1" } else { "" };
+        let mut response = client.post(&format!("https://hackattic.com/challenges/{}/solve?access_token={}{}", Self::challenge_name(), &*ACCESS_TOKEN, playground))
                 .json(solution)
                 .send()?;
             Ok(format!("{}", response.text()?))

@@ -9,20 +9,21 @@ extern crate serde;
 extern crate failure;
 #[macro_use]
 extern crate duct;
+extern crate shell_escape;
 
 #[macro_use]
 extern crate log;
 extern crate ansi_term;
 extern crate pretty_env_logger;
-extern crate rustyline;
 extern crate reqwest;
 
 use duct::cmd;
 use std::process::{Command, Output};
 use std::io::{Write, Read};
 use hackattic_common::{HackatticChallenge, make_reqwest_client};
-use failure::{Error, ResultExt};
+use failure::{Error, ResultExt, Fail};
 use std::path::PathBuf;
+use shell_escape::escape;
 
 #[derive(Debug, Deserialize)]
 struct Problem {
@@ -31,7 +32,6 @@ struct Problem {
     repo_path: PathBuf,
     ssh_key: String
 }
-
 
 fn push_message(push_token: &str, repo_host: &str) -> Result<reqwest::Response, Error> {
         #[derive(Debug, Serialize)]
@@ -48,64 +48,90 @@ fn push_message(push_token: &str, repo_host: &str) -> Result<reqwest::Response, 
         Ok(res)
 }
 
-
-fn su_as(cmd: duct::Expression, user: &str) -> duct::Expression {
-    cmd.pipe(cmd!("su", user))
+/// Represents a linux user that will be automatically deleted when dropped.
+struct TempUser {
+    name: String,
 }
-fn sudo_as(cmd: duct::Expression, user: &str) -> duct::Expression {
-    cmd.pipe(cmd!("sudo", "-u", user, "sh"))
+impl TempUser {
+    fn new<S: Into<String>>(name: S) -> Result<Self, Error> {
+        let name = name.into();
+        cmd!("sudo", "useradd", "-m", &name).run()?;
+        debug!("created user \"{}\"", name);
+        Ok(TempUser {
+            name
+        })
+    }
+}
+impl Drop for TempUser {
+    fn drop(&mut self) {
+        
+        debug!("deleting temporary user \"{}\"", self.name);
+        if let Err(e) = cmd!("sudo", "userdel", "-fr", &self.name).run() {
+            error!("failed to delete temporary user \"{}\": {:?}", self.name, e);
+        }
+    }
 }
 
-//#[cfg(target_os = "unix")]
-fn setup_git_server(problem: &Problem) -> Result<(), Error> {
+#[cfg(target_os = "linux")]
+fn setup_git_server(problem: &Problem) -> Result<TempUser, Error> {
+    let username: String = escape(std::borrow::Cow::Borrowed(&problem.username)).into_owned();
+    debug!("Creating user \"{}\"", &username);
+    let user = TempUser::new(username.clone())?;
 
-    info!("Creating user \"{}\"", &problem.username);
-    sudo_as(cmd!("adduser", "--disabled-password", "--gecos", "''", &problem.username), "root").run()?;
-
-    info!("Adding specified ssh-key to the newly adder user's authorized_keys");
-    su_as(cmd!("mkdir ~/.ssh && chmod 700 ~/.ssh"), &problem.username).run()?;
-    su_as(cmd!("touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"), &problem.username).run()?;
-    su_as(cmd!("cat").input(problem.ssh_key.as_bytes()).pipe(cmd!("tee", "-a", "~/.ssh/authorized_keys")), &problem.username).run()?;
+    debug!("Adding specified ssh-key to the newly adder user's authorized_keys");
+    cmd!("sudo","-u", &username, "sh", "-c", "mkdir -p ~/.ssh && chmod 700 ~/.ssh").run()?;
+    cmd!("sudo","-u", &username, "sh", "-c", "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys").run()?;
+    cmd!("sudo","-u", &username, "sh", "-c", "cat | tee -a ~/.ssh/authorized_keys").input(problem.ssh_key.as_bytes()).run()?;
 
 
-    let repo_path = format!("~/{:?}", &problem.repo_path);
-    info!("Initializing git directory structure at the following folder: {}", repo_path);
-    su_as(cmd!("mkdir", "-p", &repo_path).then(
-          cmd!("cd", &repo_path)).then(
-          cmd!("git", "init", "--bare")),
-          &problem.username).run()?;
+    let user_home = cmd!("sudo", "-u", &username, "sh", "-c", "echo $HOME").read()?;
+    let repo_path = format!("{}/{}", user_home, problem.repo_path.to_string_lossy());
+    debug!("Initializing git directory structure at the following folder: {}", &repo_path);
+    cmd!("sudo","-u", &username, "mkdir", "-p", &repo_path).run()?;
+    cmd!("sudo", "-u", &username, "git", "init", "--bare", &repo_path).run()?;
 
-    
-    sudo_as(cmd!("chsh", &problem.username, "-s", "$(which git-shell)"), "root").run()?;
+    debug!("Disabling shell access for git user");
+    let git_shell_path = cmd!("which", "git-shell").read()?;
+    cmd!("sudo","chsh", &username, "-s", &git_shell_path).run()?;
 
-    info!("(Re)starting ssh-server");
-    sudo_as(cmd!("service", "ssh", "restart"), "root").run()?;
+    debug!("(Re)starting ssh-server");
+    cmd!("sudo", "service", "ssh", "restart").run().or_else(|_| {
+        cmd!("sudo", "systemctl", "restart" ,"sshd").run()
+    }).map_err(|e| e.context("couldn't use either 'service' or 'systemctl' to restart ssh server, wtf are you using?"))?;
     info!("git-server ready!!");
 
-    Ok(())
+    Ok(user)
 }
 
-/*
-#[cfg(not(target_os = "unix"))]
-fn setup_git_server(problem: &Problem) -> Result<(), Error> {
-    panic!("setup_git_server currently only works on *nix systems");
+fn extract_solution_from_git(problem: &Problem, user: &TempUser) -> Result<String, Error> {
+    use std::io::Read;
+
+    let user_home = cmd!("sudo", "-u", &user.name, "sh", "-c", "echo $HOME").read()?;
+    let repo_path = PathBuf::from(user_home).join(&problem.repo_path);
+    let out_dir = std::env::temp_dir().join(&problem.repo_path);
+
+    debug!("cloning newly added git repo(via local protocol)");
+    cmd!("sudo", "git", "clone", &repo_path, &out_dir).run()?;
+    let solution_path = out_dir.join("solution.txt");
+
+    debug!("opening solution file at newly cloned repo");
+    let mut content = String::new();
+    let mut file = std::fs::File::open(solution_path)?;
+    file.read_to_string(&mut content)?;
+    info!("successfully extracted the following secret: {}", content);
+    Ok(content)
 }
-*/
+
+
+#[cfg(not(target_os = "linux"))]
+fn setup_git_server(problem: &Problem) -> Result<(), Error> {
+    panic!("this challenge requires linux");
+}
+
 
 #[derive(Debug, Serialize)]
 struct Solution {
     secret: String
-}
-
-fn dummy_run() {
-    let problem = Problem {
-        push_token: "nevermind".to_owned(),
-        username: "somebody".to_owned(),
-        repo_path: "who/cares.git".into(),
-        // pkey of nmdanny on wsl
-        ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDARUm67vu1ibLIV0yoF/ObZvHyNbviuFCFnlvaukmUIjL1067T2CX5/+rtPhj19l+pKeKJ/t+PYB9tBuRaMv+cfJEMDlJkOshTVsciev85ncUSODy/+2SQelN34+GsFlgzOmVcNE5LMSPId78IeiHkh/BOB/bKo68PXpZLOJncvk5/LjUWXz7E/n460NbEZhIvuCzBcmcAcE8o/sU8plWReSOrbykPTb7jk4+xpJDO0TEIoj7QemNRU8Ms8ruAukE7bg349si45XcZoJ0adtQnpFvxm9/LglkrTecCsp1taEqn5Owwnw75eOdM9MmyYZp99ljMdzcCTpSq5OcF/0eJ nmdanny@DESKTOP-7VLKOF6".to_owned()
-    };
-    setup_git_server(&problem).unwrap();
 }
 
 fn main() {
@@ -113,11 +139,11 @@ fn main() {
         ansi_term::enable_ansi_support();
     }
     let mut builder = pretty_env_logger::formatted_builder().unwrap();
-    builder.filter(Some("hosting_git"), log::LevelFilter::Debug);
+    builder.filter(Some("hosting_git"), log::LevelFilter::Debug)
+        .filter(Some("hackattic_common"), log::LevelFilter::Debug);
     builder.init();
     info!("Logger initialized");
-    dummy_run();
-    //HostingGit::process_challenge().unwrap();
+    HostingGit::process_challenge().unwrap();
 }
 
 struct HostingGit;
@@ -126,11 +152,11 @@ impl HackatticChallenge for HostingGit {
     type Solution = Solution;
 
     fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error> {
-        info!("Processing problem:\n{:?}", problem);
-        setup_git_server(problem)?;
-        push_message(&problem.push_token, "nmdanny.ddns.net")?;
-        let mut rl = rustyline::Editor::<()>::new();
-        let secret = rl.readline("Type the secret you've figured out here: ")?;
+        let temp_user = setup_git_server(problem)?;
+        let mut response = push_message(&problem.push_token, "nmdanny.ddns.net")?;
+        let response_txt = response.text()?;
+        info!("Push response is: {}", response_txt);
+        let secret = extract_solution_from_git(&problem, &temp_user)?;
         Ok(Solution {
             secret
         })

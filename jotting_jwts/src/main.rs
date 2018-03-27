@@ -27,6 +27,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use jsonwebtoken as jwt;
 
+#[derive(Clone)]
 struct JottingService {
     string: Rc<RefCell<String>>,
     jwt_secret: String,
@@ -130,8 +131,7 @@ impl HackatticChallenge for JottingJwts {
 
     fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error> {
         let addr = "0.0.0.0:80".parse()?;
-        let secret = problem.jwt_secret.clone();
-        let service = Rc::new(JottingService::from_secret(problem.jwt_secret.to_owned()));
+        let service = JottingService::from_secret(problem.jwt_secret.to_owned());
 
         let server = Http::new().bind(&addr, move || {
             debug!("Binding new connection to service...");

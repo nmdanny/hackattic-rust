@@ -20,7 +20,7 @@ extern crate reqwest;
 extern crate jsonwebtoken;
 
 use hackattic_common::{HackatticChallenge, make_reqwest_client};
-use failure::{Error, Fail};
+use failure::Error;
 use futures::{Future, Stream};
 use hyper::server::{Http, Request, Response, Service};
 use std::cell::RefCell;
@@ -138,7 +138,6 @@ impl HackatticChallenge for JottingJwts {
             let service = service.clone();
             Ok(service)
         }).map_err(|hyp_err| format_err!("Error while binding server: {:?}", hyp_err))?;
-        let handle = server.handle();
 
         info!("Began listening to connections on http://{}", server.local_addr()?);
 
@@ -146,21 +145,20 @@ impl HackatticChallenge for JottingJwts {
             app_url: "http://nmdanny.ddns.net".to_owned()
         };
         
-        
-        /*
+        let (tx, rx) = futures::sync::oneshot::channel();
         let mut client = make_reqwest_client()?;
-        // TODO: schedule this to happen after running the server
-        handle.spawn_fn(move || {
-            info!("sending server's http server...");
-            let res = Self::send_solution(&solution, &mut client).unwrap_or_else(|e| panic!("Couldn't send server address to hackattic: {:?}", e));
-            info!("response of sending server's http address: {:}", res);
-            
-            futures::future::ok(())
-        });
-        */
+        let send_solution_fut = futures::future::lazy(|| {
+            std::thread::spawn(move || {
+                info!("sending server's http server...");
+                let res = Self::send_solution(&solution, &mut client).unwrap_or_else(|e| panic!("Couldn't send server address to hackattic: {:?}", e));
+                info!("response of sending server's http address: {:}", res);
+                tx.send(()).unwrap();
+            });
+            rx
+        }).map_err(|_| ());
         
-        server.run()?;
-        unreachable!()
+        server.run_until(send_solution_fut)?;
+        std::process::exit(0)
     }
 
     fn challenge_name() -> &'static str {

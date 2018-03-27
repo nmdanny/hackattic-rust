@@ -6,5 +6,5 @@ authors = ["NMDanny <nmdanny@gmail.com>"]
 [dependencies]
 hackattic_common = { path = "hackattic_common" }
 hosting_git = { path = "hosting_git" }
-
+jotting_jwts = { path = "jotting_jwts" }
 [workspace]

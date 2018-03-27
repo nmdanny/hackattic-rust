@@ -17,24 +17,38 @@ extern crate hyper;
 extern crate tokio_core;
 extern crate futures;
 extern crate reqwest;
+extern crate jsonwebtoken;
 
 use hackattic_common::{HackatticChallenge, make_reqwest_client};
 use failure::{Error, Fail};
 use futures::{Future, Stream};
 use hyper::server::{Http, Request, Response, Service};
-use std::cell::Cell;
+use std::cell::RefCell;
+use std::rc::Rc;
+use jsonwebtoken as jwt;
 
 struct JottingService {
-    string: Cell<String>,
-    jwt_secret: String
+    string: Rc<RefCell<String>>,
+    jwt_secret: String,
+    jwt_validation: jwt::Validation
 }
+
 impl JottingService {
     fn from_secret(secret: String) -> Self {
         Self {
             jwt_secret: secret,
-            string: Cell::default()
+            string: Rc::new(RefCell::default()),
+            jwt_validation: jwt::Validation { leeway: 5, ..jwt::Validation::default() }
         }
     }
+
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum JwtClaims {
+    Append { append: String },
+    Empty {},
 }
 
 impl Service for JottingService {
@@ -45,10 +59,39 @@ impl Service for JottingService {
 
     fn call(&self, req: Self::Request) -> Self::Future {
         debug!("Got request {:?}", req);
-        Box::new(futures::future::ok(
-            Response::new()
-                .with_body("TODO")
-        ))
+        
+        let secret = self.jwt_secret.clone().into_bytes();
+        let validation = self.jwt_validation.clone();
+        let string = self.string.clone();
+
+        let fut = req.body().concat2().and_then(move |jwt_bytes| {
+            debug!("Got body, decoding as JWT...");
+            let jwt_st = String::from_utf8_lossy(&jwt_bytes);
+
+            let jwt = match jwt::decode::<JwtClaims>(&jwt_st, &secret, &validation) {
+                Ok(jwt) => jwt,
+                Err(e) => {
+                    error!("There was an error validating a JWT: {:?} - skipping", e);
+                    return Ok(Response::new().with_body(format!("Skipping due to invalid JWT: {:?}", e)));
+                }
+            };
+            debug!("JWT is {:?}", jwt);
+            match jwt.claims {
+                JwtClaims::Append { append } => {
+                    info!("Appending '{}' to '{}'", append, string.borrow());
+                    let mut string = string.borrow_mut();
+                    string.push_str(&append);
+                    Ok(Response::new().with_body("continue..."))
+                },
+                JwtClaims::Empty {} => {
+                    let res = SolutionResponse { solution: string.borrow().clone() };
+                    let json_bytes = serde_json::to_vec(&res).unwrap();
+                    info!("Got end message, secret is {}", res.solution);
+                    Ok(Response::new().with_body(json_bytes))
+                }
+            }
+        });
+        Box::new(fut)
     }
 }
 
@@ -56,6 +99,11 @@ impl Service for JottingService {
 #[derive(Debug, Deserialize)]
 struct Problem {
     jwt_secret: String
+}
+
+#[derive(Debug, Serialize)]
+struct SolutionResponse {
+    solution: String
 }
 
 #[derive(Debug, Serialize)]
@@ -81,14 +129,13 @@ impl HackatticChallenge for JottingJwts {
     type Solution = Solution;
 
     fn make_solution(problem: &Self::Problem) -> Result<Self::Solution, Error> {
-        let mut core = tokio_core::reactor::Core::new()?;
-
         let addr = "0.0.0.0:80".parse()?;
         let secret = problem.jwt_secret.clone();
+        let service = Rc::new(JottingService::from_secret(problem.jwt_secret.to_owned()));
+
         let server = Http::new().bind(&addr, move || {
-            // TODO: share 'service' between different connections (will need to make it Sync by wrapping its string in a mutex)
-            debug!("Creating a JottingService for new connection");
-            let service = JottingService::from_secret(secret.clone());
+            debug!("Binding new connection to service...");
+            let service = service.clone();
             Ok(service)
         }).map_err(|hyp_err| format_err!("Error while binding server: {:?}", hyp_err))?;
         let handle = server.handle();
@@ -98,6 +145,7 @@ impl HackatticChallenge for JottingJwts {
         let solution = Solution {
             app_url: "http://nmdanny.ddns.net".to_owned()
         };
+        
         
         /*
         let mut client = make_reqwest_client()?;
@@ -110,6 +158,7 @@ impl HackatticChallenge for JottingJwts {
             futures::future::ok(())
         });
         */
+        
         server.run()?;
         unreachable!()
     }
